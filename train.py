@@ -103,6 +103,17 @@ def load_data():
 # relevance label
 # 2.33
 
+def tokenize_data(tokenizer, data):
+    # print(type(data))
+    list_data = data.tolist()
+    tokenized_data = tokenizer(list_data, truncation=True, padding="max_length")
+    
+    return {
+        "input_ids": tokenized_data["input_ids"],
+        "token_type_ids": tokenized_data["token_type_ids"],
+        "attention_mask": tokenized_data["attention_mask"]
+    }
+
 def load_perceptron(input_shape=(768,)):
     model = tf.keras.Sequential([
         tf.keras.layers.Dense(128, activation='relu', input_shape=input_shape),
@@ -130,6 +141,17 @@ def train():
 
 
     tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+    
+    dataset = load_data()
+    
+    tokenized_dataset = tokenize_data(tokenizer, dataset["product_info"])
+        
+    dataset["token_type_ids"] = tokenized_dataset["token_type_ids"]
+    dataset["input_ids"]  = tokenized_dataset["input_ids"]
+    dataset["attention_mask"] = tokenized_dataset["attention_mask"]
+    
+    # TODO: train/test split, check if proper input for NN
+
     data_collator = DataCollatorWithPadding(tokenizer, padding=True)
 
     trainer = Trainer(
@@ -157,5 +179,10 @@ def train():
 
 
 if __name__ == "__main__":
-    # train()
-    print(load_data().head(5))
+    train()
+    # print(load_data()["product_info"][0])
+    # tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+
+    # tokenized_data = tokenize_data(tokenizer, load_data()["product_info"])
+    # print(tokenized_data)
+    # print(tokenized_data[0])
