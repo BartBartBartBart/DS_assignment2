@@ -7,6 +7,7 @@ from sklearn.model_selection import train_test_split
 import pandas as pd
 import numpy as np
 import tensorflow as tf
+import math
 # import torch
     
 def load_data():
@@ -30,7 +31,7 @@ def tokenize_data(tokenizer, data):
 
 def load_perceptron(input_shape):
     model = tf.keras.Sequential()
-    model.add(tf.keras.layers.Dense(128, activation='relu', input_shape=input_shape))
+    model.add(tf.keras.layers.Dense(128, activation='relu'))
     model.add(tf.keras.layers.Dense(1, activation='linear'))
     model.compile(loss=tf.keras.losses.MeanSquaredError(), optimizer="adam")
     return model 
@@ -56,34 +57,31 @@ def train():
     X_train, X_test, y_train, y_test = train_test_split(
          X, y, test_size=0.2, random_state=42
     )  
-    
-    # print(type(X_train["input_ids"].iloc[0]), type(X_test), type(y_train), type(y_test.iloc[0]))
-    # X_train = X_train.map(lambda x: np.array(x))
 
-    # # convert to list
-    # X_train = X_train.values.tolist()
-    # X_test = X_test.values.tolist()
-    # y_train = y_train.values.tolist()
-    # y_test = y_test.values.tolist()
-       
     X_train = np.array(X_train.values.tolist())
     X_test = np.array(X_test.values.tolist())
     y_train = np.array(y_train.values.tolist())
     y_test = np.array(y_test.values.tolist())
 
        
-    # print(X_train.iloc[0])
     
     perceptron = load_perceptron(input_shape=(None, None, 3, 512))
     perceptron.fit(X_train, y_train, epochs=20, batch_size=32, verbose=1)
-    _, accuracy = perceptron.evaluate(X_test, y_test)
     y_pred = perceptron.predict(X_test)
-    print("ACCURACY ", accuracy)
     
-    mse = mean_squared_error(y_test, y_pred)
-    # mae = mean_absolute_error(y_test, y_pred)
+    # y_pred has shape [14814,3,1], we take 1st prediction (TODO: maybe reshape y_test or at least double check)
+    # reshape into [14814,1] because that is shape of y_test 
+    y_pred = y_pred[:,0,:]
+    y_pred = np.reshape(y_pred, (14814,1))
 
+    mse = mean_squared_error(y_test, y_pred)
+
+    rmse = math.sqrt(mse)
+    
     print(f"MSE: {mse}")
+    print(f"RMSE: {rmse}")
+    
+    # TODO: cross-validation, seed for reproducibility
     
     # APPROACH
     # Tokenize the input query and product using BERT to generate fixed-length vector representations.
