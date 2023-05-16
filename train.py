@@ -94,6 +94,7 @@ def train(model, optimizer, scheduler, loss_function, epochs,
             outputs = model(batch_inputs, batch_masks)           
             loss = loss_function(outputs.squeeze(), 
                              batch_labels.squeeze())
+            print(f"Loss: {loss}")
             loss.backward()
             clip_grad_norm(model.parameters(), clip_value)
             optimizer.step()
