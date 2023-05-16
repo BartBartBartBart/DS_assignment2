@@ -94,12 +94,14 @@ def train(model, optimizer, scheduler, loss_function, epochs,
             outputs = model(batch_inputs, batch_masks)           
             loss = loss_function(outputs.squeeze(), 
                              batch_labels.squeeze())
-            print(f"Loss: {loss}")
+            if loss < best_loss:
+                best_loss = loss
+                
             loss.backward()
             clip_grad_norm(model.parameters(), clip_value)
             optimizer.step()
             scheduler.step()
-                
+        print(f"Best loss this epoch: {best_loss}")
     return model
 
 def evaluate(model, loss_function, test_dataloader, device):
