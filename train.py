@@ -69,6 +69,9 @@ def train():
     perceptron.fit(X_train, y_train, epochs=20, batch_size=32, verbose=1)
     y_pred = perceptron.predict(X_test)
     
+    print(y_pred[0:10])
+    print(y_test[0:10])
+    
     # y_pred has shape [14814,3,1], we take 1st prediction (TODO: maybe reshape y_test or at least double check)
     # reshape into [14814,1] because that is shape of y_test 
     y_pred = y_pred[:,0,:]
