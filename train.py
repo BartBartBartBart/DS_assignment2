@@ -25,8 +25,7 @@ class BertRegressor(nn.Module):
         super(BertRegressor, self).__init__()
         D_in, D_out = 768, 1
         
-        self.bert = \
-                   BertModel.from_pretrained('bert-base-uncased')
+        self.bert = BertModel.from_pretrained('bert-base-uncased')
         self.regressor = nn.Sequential(
             nn.Dropout(drop_rate),
             nn.Linear(D_in, D_out))    
