@@ -1,3 +1,15 @@
+"""
+train.py
+Implementation of the effect of a BERT tokenizer on the performance of 
+a randomforest + baggingregressor on a relevance score prediction task.
+
+Course: Data Science
+Date: May 2023
+Authors:
+  - Lisanne Wallaard, s2865459, Data Science & Artificial Intelligence
+  - Bart den Boef, s2829452, Data Science & Artificial Intelligence
+"""
+
 from transformers import (
     BertTokenizerFast
 )
@@ -8,105 +20,196 @@ import numpy as np
 import tensorflow as tf
 import math
 from sklearn.ensemble import RandomForestRegressor, BaggingRegressor
-# import torch
+from nltk.stem.snowball import SnowballStemmer
+from sklearn.model_selection import RandomizedSearchCV
     
+    
+def str_stemmer(s, stemmer):
+	return " ".join([stemmer.stem(word) for word in s.lower().split()])
+
+
+def str_common_word(str1, str2):
+    str1 = str(str1)
+    str2 = str(str2)
+    return sum(int(str2.find(word)>=0) for word in str1.split())
+
+
 def load_data():
     train_df = pd.read_csv("./data/train.csv",encoding="latin-1",on_bad_lines = 'warn')
     product_df = pd.read_csv("./data/product_descriptions.csv",encoding="utf-8")
     df = pd.merge(train_df, product_df, how='left', on='product_uid')
-    df['product_info'] = df['search_term']+"\t"+df['product_title']+"\t"+df['product_description']
-    df = df.drop(['id', 'product_uid', 'product_title', 'search_term','product_description'],axis=1)
+    df['len_of_query'] = df['search_term'].map(lambda x:len(x.split())).astype(np.int64)
+    df = df.drop(['id'],axis=1)
     return df
 
 
 def tokenize_data(tokenizer, data):
     list_data = data.tolist()
-    tokenized_data = tokenizer(list_data, truncation=True, padding="max_length")
+    tokenized_data = tokenizer(list_data, truncation=True, padding="longest")
     
     return {
         "input_ids": tokenized_data["input_ids"],
         "token_type_ids": tokenized_data["token_type_ids"],
         "attention_mask": tokenized_data["attention_mask"]
     }
-
-def load_nn():
-    model = tf.keras.Sequential()
-    model.add(tf.keras.layers.Dense(128, activation='relu'))
-    model.add(tf.keras.layers.Dropout(0.2))
-    model.add(tf.keras.layers.Dense(64, activation='relu'))
-    model.add(tf.keras.layers.Dense(32, activation='relu'))
-    model.add(tf.keras.layers.Dropout(0.2))
-    model.add(tf.keras.layers.Dense(32, activation='relu'))
-    model.add(tf.keras.layers.Dense(1, activation='linear'))
-    model.compile(loss=tf.keras.losses.MeanSquaredError(), optimizer="adam", metrics=["accuracy"])
-    return model 
-
-def train():
-    tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
     
+
+def dataset_baseline(dataset, stemmer):
+    # Stemming with snowballstemmer
+    dataset['search_term'] = dataset['search_term'].map(lambda x:str_stemmer(x,stemmer))
+    dataset['product_title'] = dataset['product_title'].map(lambda x:str_stemmer(x,stemmer))
+    dataset['product_description'] = dataset['product_description'].map(lambda x:str_stemmer(x,stemmer))
+    # Count common words
+    dataset['product_info'] = dataset['search_term']+"\t"+dataset['product_title']+"\t"+dataset['product_description']
+    dataset['word_in_title'] = dataset['product_info'].map(lambda x:str_common_word(x.split('\t')[0],x.split('\t')[1]))
+    dataset['word_in_description'] = dataset['product_info'].map(lambda x:str_common_word(x.split('\t')[0],x.split('\t')[2]))
+    # Split in X and y
+    dataset = dataset.drop(['search_term','product_title','product_description','product_info'],axis=1)
+    X = dataset.drop(["relevance"], axis=1)
+    y = dataset["relevance"]
+
+    return X, y
+
+
+def dataset_tokenizer(tokenizer, dataset):    
+    # Tokenize the text in the dataset
+    tokenized_query = tokenize_data(tokenizer, dataset["search_term"])  
+    tokenized_description = tokenize_data(tokenizer, dataset["product_description"])    
+    tokenized_title = tokenize_data(tokenizer, dataset["product_title"])  
+    # Count common words
+    dataset["word_in_title"] = str_common_word(tokenized_query["input_ids"], tokenized_title["input_ids"])
+    dataset["word_in_description"] = str_common_word(tokenized_query["input_ids"], tokenized_description["input_ids"])
+    # Split in X and Y
+    dataset = dataset.drop(['search_term', 'product_title', 'product_description'],axis=1)
+    X = dataset.drop(["relevance"], axis=1)
+    y = dataset["relevance"]
+
+    return X, y
+
+
+def dataset_product_info(tokenizer, dataset, stemmer):   
+    # Tokenize the text in the dataset
+    tokenized_query = tokenize_data(tokenizer, dataset["search_term"])  
+    tokenized_description = tokenize_data(tokenizer, dataset["product_description"])    
+    tokenized_title = tokenize_data(tokenizer, dataset["product_title"])  
+    
+    # Stemming with snowballstemmer
+    dataset['search_term'] = dataset['search_term'].map(lambda x:str_stemmer(x,stemmer))
+    dataset['product_title'] = dataset['product_title'].map(lambda x:str_stemmer(x,stemmer))
+    dataset['product_description'] = dataset['product_description'].map(lambda x:str_stemmer(x,stemmer))
+    
+    # Count common words
+    dataset['product_info'] = dataset['search_term']+"\t"+dataset['product_title']+"\t"+dataset['product_description']
+    dataset['word_in_title'] = dataset['product_info'].map(lambda x:str_common_word(x.split('\t')[0],x.split('\t')[1]))
+    dataset['word_in_description'] = dataset['product_info'].map(lambda x:str_common_word(x.split('\t')[0],x.split('\t')[2]))
+    
+    # # Add tokenized text as feature to the dataset
+    dataset["search_term"] = np.array(tokenized_query["input_ids"])
+    dataset["product_description"] = np.array(tokenized_description["input_ids"])
+    dataset["product_title"] = np.array(tokenized_title["input_ids"])
+    
+    # Split in X and y
+    dataset = dataset.drop(['product_info'],axis=1)
+    X = dataset.drop(["relevance"], axis=1)
+    y = dataset["relevance"]
+
+    return X, y
+
+
+def dataset_tokenizer_product_info(tokenizer, dataset):    
+    # Tokenize the text in the dataset
+    tokenized_query = tokenize_data(tokenizer, dataset["search_term"])  
+    tokenized_description = tokenize_data(tokenizer, dataset["product_description"])    
+    tokenized_title = tokenize_data(tokenizer, dataset["product_title"])  
+    # Count common words
+    dataset["word_in_title"] = str_common_word(tokenized_query["input_ids"], tokenized_title["input_ids"])
+    dataset["word_in_description"] = str_common_word(tokenized_query["input_ids"], tokenized_description["input_ids"])
+    # Add tokenized text as feature to the dataset
+    dataset["search_term"] = np.array(tokenized_query["input_ids"])
+    dataset["product_description"] = np.array(tokenized_description["input_ids"])
+    dataset["product_title"] = np.array(tokenized_title["input_ids"])
+    # Split in X and y
+    X = dataset.drop(["relevance"], axis=1)
+    y = dataset["relevance"]
+    
+    return X, y
+
+
+# Train model on specified version of dataset
+def train(with_tokenizer=False, with_product_info=False, hp_optimization=False, debug=False):
+    
+    # Load tokenizer and dataset
+    tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+    stemmer = SnowballStemmer('english')
     dataset = load_data()
     
-    tokenized_dataset = tokenize_data(tokenizer, dataset["product_info"])
-        
-    dataset["token_type_ids"] = tokenized_dataset["token_type_ids"]
-    dataset["input_ids"]  = tokenized_dataset["input_ids"]
-    dataset["attention_mask"] = tokenized_dataset["attention_mask"]
-    # X = np.concatenate((tokenized_dataset["input_ids"],tokenized_dataset["attention_mask"]), axis=1)
-    # X = np.concatenate((X,tokenized_dataset["token_type_ids"]), axis=1)
-    X = np.array(dataset["input_ids"].values.tolist())
-    y = np.array(dataset["relevance"].values.tolist())
-
-    # X = dataset.drop(["product_info", "relevance", "token_type_ids", "input_ids", "attention_mask"], axis=1)
-    # y = dataset.drop(["product_info", "token_type_ids", "input_ids", "attention_mask"], axis=1)
-    # y = dataset.drop(["product_info", "token_type_ids"], axis=1)
-
-    # X['input_ids'] = X['input_ids'].map(lambda x: np.array(x))
-    # X['token_type_ids'] = X['token_type_ids'].map(lambda x: np.array(x))
-    # X['attention_mask'] = X['attention_mask'].map(lambda x: np.array(x))
-
+    # Load specified version of dataset
+    if with_tokenizer and with_product_info:
+        X, y = dataset_tokenizer_product_info(tokenizer, dataset)
+    elif with_product_info:
+        X, y = dataset_product_info(tokenizer, dataset, stemmer)
+    elif with_tokenizer:
+        X, y = dataset_tokenizer(tokenizer, dataset)
+    else:
+        print('h')
+        X, y = dataset_baseline(dataset, stemmer)
+    
+    # Train/test split
     X_train, X_test, y_train, y_test = train_test_split(
-         X, y, test_size=0.2, random_state=42
+        X, y, test_size=0.2, random_state=47
     )  
     
-    # X_train = np.array(X_train.values.tolist())
-    # X_test = np.array(X_test.values.tolist())
-    # y_train = np.array(y_train.values.tolist())
-    # y_test = np.array(y_test.values.tolist())
+    # Hyperparameter optimization
+    if hp_optimization:
+        params = {
+            'bootstrap': [True, False],
+            'max_features': [0.2, 0.4, 0.6, 0.8, 1],
+            'max_samples': [1,2,4,6,8,10],
+            'n_estimators': [10, 20, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000], 
+            'oob_score': [True, False], 
+            'verbose': [0,  5,10,15,20,25,30,35,40],  
+            'warm_start': [True, False]
+        }
+        rf = RandomForestRegressor(n_estimators=15, max_depth=6, random_state=0)
+        clf = BaggingRegressor(rf, n_estimators=45, max_samples=0.1, random_state=0)
+        rscv = RandomizedSearchCV(clf, params, random_state=0)
+        search = rscv.fit(X_train, y_train)
+        print(search.best_params_)
+        
+        # Optimal params:
+        # bootstrap= True,
+        # max_features= 0.8,
+        # max_samples= 10,
+        # n_estimators= 10,
+        # oob_score= False,
+        # verbose= 40,
+        # warm_start= False, 
+        
+    else:
+        # Run experiment with seeds
+        avg_rsme = 0
+        for seed in [0,1,2,3,4,5,6,7,8,9]:
+            rf = RandomForestRegressor(n_estimators=15, max_depth=6, random_state=seed)
+            clf = BaggingRegressor(rf, n_estimators=45, max_samples=0.1, random_state=seed)  
+            clf.fit(X_train, y_train)
+            y_pred = clf.predict(X_test)
+            
+            # For debugging purposes:
+            #
+            # for test, pred in zip(y_test,y_pred):
+            #     print(f"Prediction {pred}, Truth {test}")
+            
+            mse = mean_squared_error(y_test, y_pred)
+            rmse = math.sqrt(mse)
+            
+            avg_rsme += rmse
+            
+            if debug:
+                print(f"MSE: {mse}")
+                print(f"RMSE: {rmse}")
+                
+        print(f"Average RMSE over 10 runs: {avg_rsme/10}")
     
-    # model = load_nn()
-    # model.fit(X_train, y_train, epochs=15, batch_size=16, verbose=1)
-    # y_pred = model.predict(X_test)
-    
-    rf = RandomForestRegressor(n_estimators=15, max_depth=6, random_state=0)
-    clf = BaggingRegressor(rf, n_estimators=45, max_samples=0.1, random_state=25)
-    clf.fit(X_train, y_train)
-    y_pred = clf.predict(X_test)
-    
-    for test, pred in zip(y_test,y_pred):
-        print(f"Prediction {pred}, Truth {test}")
-    
-    # y_pred has shape [14814,3,1], we take 1st prediction (TODO: maybe reshape y_test or at least double check)
-    # reshape into [14814,1] because that is shape of y_test 
-    # y_pred = y_pred[:,0,:]
-    # y_pred = np.reshape(y_pred, (14814,1))
-
-    
-    mse = mean_squared_error(y_test, y_pred)
-
-    rmse = math.sqrt(mse)
-    
-    print(f"MSE: {mse}")
-    print(f"RMSE: {rmse}")
-    
-    # TODO: cross-validation, seed for reproducibility
-    
-    # APPROACH
-    # Tokenize the input query and product using BERT to generate fixed-length vector representations.
-    # Concatenate the vector representations of the query and product to form a single input vector.
-    # Feed the input vector into a feedforward neural network that has been defined using TensorFlow's tf.keras API.
-    # Train the neural network on a training set of labeled data, using the fit method of the tf.keras.Model class.
-    # Evaluate the performance of the trained model on a held-out test set, using the evaluate method of the tf.keras.Model class.
-    # Use the trained model to make relevance score predictions for new queries and products.
     
 if __name__=="__main__":
     train()
