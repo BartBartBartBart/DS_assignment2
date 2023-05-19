@@ -53,7 +53,9 @@ def tokenize_data(tokenizer, data):
         "attention_mask": tokenized_data["attention_mask"]
     }
     
-
+    
+# Generates X and y according to the baseline approach
+# Uses the snowball stemmer
 def dataset_baseline(dataset, stemmer):
     # Stemming with snowballstemmer
     dataset['search_term'] = dataset['search_term'].map(lambda x:str_stemmer(x,stemmer))
@@ -71,6 +73,7 @@ def dataset_baseline(dataset, stemmer):
     return X, y
 
 
+# Generates X and y using the BERT tokenizer
 def dataset_tokenizer(tokenizer, dataset):    
     # Tokenize the text in the dataset
     tokenized_query = tokenize_data(tokenizer, dataset["search_term"])  
@@ -87,6 +90,8 @@ def dataset_tokenizer(tokenizer, dataset):
     return X, y
 
 
+# Generates X and y using the snowball stemmer
+# Includes tokenized product info (tokenized using the BERT tokenizer)
 def dataset_product_info(tokenizer, dataset, stemmer):   
     # Tokenize the text in the dataset
     tokenized_query = tokenize_data(tokenizer, dataset["search_term"])  
@@ -116,6 +121,7 @@ def dataset_product_info(tokenizer, dataset, stemmer):
     return X, y
 
 
+# Generates X and y using the BERT tokenizer, and includes the tokenized product info
 def dataset_tokenizer_product_info(tokenizer, dataset):    
     # Tokenize the text in the dataset
     tokenized_query = tokenize_data(tokenizer, dataset["search_term"])  
@@ -212,4 +218,11 @@ def train(with_tokenizer=False, with_product_info=False, hp_optimization=False, 
     
     
 if __name__=="__main__":
-    train()
+    # Turn 'with_tokenizer' and 'with_product_info' on or off to toggle between different setups
+    # Set hp_optimization to True to do hyperparameter optimization
+    train(
+        with_tokenizer=False,
+        with_product_info=False,
+        hp_optimization=False,
+        debug=False
+    )
