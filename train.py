@@ -151,13 +151,16 @@ def train(with_tokenizer=False, with_product_info=False, hp_optimization=False, 
     
     # Load specified version of dataset
     if with_tokenizer and with_product_info:
+        print("Running BERT Tokenizer + Tokenized Product Info")
         X, y = dataset_tokenizer_product_info(tokenizer, dataset)
     elif with_product_info:
+        print("Running Baseline + Tokenized Product Info")
         X, y = dataset_product_info(tokenizer, dataset, stemmer)
     elif with_tokenizer:
+        print("Running BERT Tokenizer")
         X, y = dataset_tokenizer(tokenizer, dataset)
     else:
-        print('h')
+        print("Running Baseline")
         X, y = dataset_baseline(dataset, stemmer)
     
     # Train/test split
@@ -221,8 +224,8 @@ if __name__=="__main__":
     # Turn 'with_tokenizer' and 'with_product_info' on or off to toggle between different setups
     # Set hp_optimization to True to do hyperparameter optimization
     train(
-        with_tokenizer=False,
-        with_product_info=False,
+        with_tokenizer=True,
+        with_product_info=True,
         hp_optimization=False,
         debug=False
     )
