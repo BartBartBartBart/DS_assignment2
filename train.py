@@ -22,6 +22,7 @@ import math
 from sklearn.ensemble import RandomForestRegressor, BaggingRegressor
 from nltk.stem.snowball import SnowballStemmer
 from sklearn.model_selection import RandomizedSearchCV
+import matplotlib.pyplot as plt
     
     
 def str_stemmer(s, stemmer):
@@ -140,14 +141,102 @@ def dataset_tokenizer_product_info(tokenizer, dataset):
     
     return X, y
 
+# Plots the distribution of relevance scores in the dataset
+def plot_relevance_score(relevance_score):
+    fig, axs = plt.subplots(1, 2, sharey=False, tight_layout=False)
+
+    # We can set the number of bins with the *bins* keyword argument.
+    axs[0].hist(relevance_score, bins=7)
+    axs[1].boxplot(relevance_score)
+
+    # Set title
+    fig.suptitle("Distribution of Relevance Scores", fontsize="x-large")
+
+    # Set labels
+    axs[0].set_xlabel("Relevance Score")
+    axs[0].set_ylabel("Amount of ratings")
+
+    axs[1].set_xlabel("")
+    axs[1].set_ylabel("Relevance Scores")
+
+    plt.show()
+    
+# Plots the importance of features in the model
+def plot_importance_features(feature_names, X_train, y_train, seeds):    
+    # Calculate the Importance of the features
+    feature_importance = np.zeros(len(feature_names))
+    for i in seeds:
+        rf = RandomForestRegressor(n_estimators=15, max_depth=6, random_state=i)
+        rf.fit(X_train, y_train)
+        feature_importance = np.add(feature_importance, rf.feature_importances_)
+    feature_importance = feature_importance/len(seeds)
+
+    # Sort the features on Importance
+    index_sorted = feature_importance.argsort()
+
+    # Plot the Importance of the features
+    plt.barh(feature_names[index_sorted], feature_importance[index_sorted])
+    plt.xlabel("Feature Importance")
+    plt.title("Features sorted by Importance")
+    plt.show()
+    
+# Runs the experiment with seeds
+def run_experiment(X_train, X_test, y_train, y_test, debug, seeds):
+    # Initialize the average RMSE over 10 runs
+    avg_rsme = 0
+    for seed in seeds:
+        rf = RandomForestRegressor(n_estimators=15, max_depth=6, random_state=seed)
+        clf = BaggingRegressor(rf, n_estimators=45, max_samples=0.1, random_state=seed)  
+        clf.fit(X_train, y_train)
+        y_pred = clf.predict(X_test)
+        
+        # For debugging purposes:
+        #
+        # for test, pred in zip(y_test,y_pred):
+        #     print(f"Prediction {pred}, Truth {test}")
+        
+        # Calculate RMSE
+        mse = mean_squared_error(y_test, y_pred)
+        rmse = math.sqrt(mse)
+        
+        avg_rsme += rmse
+        
+        # Print RMSE and MSE for each run
+        if debug:
+            print(f"MSE: {mse}")
+            print(f"RMSE: {rmse}")
+           
+    # Print average RMSE over 10 runs
+    print(f"Average RMSE over 10 runs: {avg_rsme/10}")
+    
+# Optimizes hyperparameters of the model
+def hyperparameter_optimization(X_train, y_train):
+    params = {
+            'bootstrap': [True, False],
+            'max_features': [0.2, 0.4, 0.6, 0.8, 1],
+            'max_samples': [1,2,4,6,8,10],
+            'n_estimators': [10, 20, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000], 
+            'oob_score': [True, False], 
+            'verbose': [0,  5,10,15,20,25,30,35,40],  
+            'warm_start': [True, False]
+        }
+    rf = RandomForestRegressor(n_estimators=15, max_depth=6, random_state=0)
+    clf = BaggingRegressor(rf, n_estimators=45, max_samples=0.1, random_state=0)
+    rscv = RandomizedSearchCV(clf, params, random_state=0)
+    search = rscv.fit(X_train, y_train)
+    print(search.best_params_)
+    
 
 # Train model on specified version of dataset
-def train(with_tokenizer=False, with_product_info=False, hp_optimization=False, debug=False):
+def train(with_tokenizer=False, with_product_info=False, hp_optimization=False, debug=False, plot_data=False, plot_importance=False):
     
     # Load tokenizer and dataset
     tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
     stemmer = SnowballStemmer('english')
     dataset = load_data()
+    
+    # Set seeds for reproducibility
+    seeds = [0,1,2,3,4,5,6,7,8,9]
     
     # Load specified version of dataset
     if with_tokenizer and with_product_info:
@@ -157,7 +246,6 @@ def train(with_tokenizer=False, with_product_info=False, hp_optimization=False, 
     elif with_tokenizer:
         X, y = dataset_tokenizer(tokenizer, dataset)
     else:
-        print('h')
         X, y = dataset_baseline(dataset, stemmer)
     
     # Train/test split
@@ -167,20 +255,8 @@ def train(with_tokenizer=False, with_product_info=False, hp_optimization=False, 
     
     # Hyperparameter optimization
     if hp_optimization:
-        params = {
-            'bootstrap': [True, False],
-            'max_features': [0.2, 0.4, 0.6, 0.8, 1],
-            'max_samples': [1,2,4,6,8,10],
-            'n_estimators': [10, 20, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000], 
-            'oob_score': [True, False], 
-            'verbose': [0,  5,10,15,20,25,30,35,40],  
-            'warm_start': [True, False]
-        }
-        rf = RandomForestRegressor(n_estimators=15, max_depth=6, random_state=0)
-        clf = BaggingRegressor(rf, n_estimators=45, max_samples=0.1, random_state=0)
-        rscv = RandomizedSearchCV(clf, params, random_state=0)
-        search = rscv.fit(X_train, y_train)
-        print(search.best_params_)
+        # Run hyperparameter optimization
+        hyperparameter_optimization(X_train, y_train)
         
         # Optimal params:
         # bootstrap= True,
@@ -193,28 +269,17 @@ def train(with_tokenizer=False, with_product_info=False, hp_optimization=False, 
         
     else:
         # Run experiment with seeds
-        avg_rsme = 0
-        for seed in [0,1,2,3,4,5,6,7,8,9]:
-            rf = RandomForestRegressor(n_estimators=15, max_depth=6, random_state=seed)
-            clf = BaggingRegressor(rf, n_estimators=45, max_samples=0.1, random_state=seed)  
-            clf.fit(X_train, y_train)
-            y_pred = clf.predict(X_test)
-            
-            # For debugging purposes:
-            #
-            # for test, pred in zip(y_test,y_pred):
-            #     print(f"Prediction {pred}, Truth {test}")
-            
-            mse = mean_squared_error(y_test, y_pred)
-            rmse = math.sqrt(mse)
-            
-            avg_rsme += rmse
-            
-            if debug:
-                print(f"MSE: {mse}")
-                print(f"RMSE: {rmse}")
-                
-        print(f"Average RMSE over 10 runs: {avg_rsme/10}")
+        run_experiment(X_train, X_test, y_train, y_test, debug, seeds)
+        
+    if plot_data:
+        # Plot the distribution of relevance scores
+        plot_relevance_score(y)
+        
+    if plot_importance:
+        # Names of features in the model
+        feature_names = X.columns
+        # Plot the importance of the features
+        plot_importance_features(feature_names, X_train, y_train, seeds)
     
     
 if __name__=="__main__":
@@ -222,7 +287,9 @@ if __name__=="__main__":
     # Set hp_optimization to True to do hyperparameter optimization
     train(
         with_tokenizer=False,
-        with_product_info=False,
+        with_product_info=True,
         hp_optimization=False,
-        debug=False
+        debug=False, 
+        plot_data=False,
+        plot_importance=False
     )
