@@ -81,8 +81,13 @@ def dataset_tokenizer(tokenizer, dataset):
     tokenized_description = tokenize_data(tokenizer, dataset["product_description"])    
     tokenized_title = tokenize_data(tokenizer, dataset["product_title"])  
     # Count common words
-    dataset["word_in_title"] = str_common_word(tokenized_query["input_ids"], tokenized_title["input_ids"])
-    dataset["word_in_description"] = str_common_word(tokenized_query["input_ids"], tokenized_description["input_ids"])
+    word_in_title = []
+    word_in_description = []
+    for query, title, description in zip(tokenized_query["input_ids"], tokenized_title["input_ids"], tokenized_description["input_ids"]):
+        word_in_title.append(str_common_word(query, title))
+        word_in_description.append(str_common_word(query, description))
+    dataset["word_in_title"] = word_in_title
+    dataset["word_in_description"] = word_in_description
     # Split in X and Y
     dataset = dataset.drop(['search_term', 'product_title', 'product_description'],axis=1)
     X = dataset.drop(["relevance"], axis=1)
@@ -110,9 +115,9 @@ def dataset_product_info(tokenizer, dataset, stemmer):
     dataset['word_in_description'] = dataset['product_info'].map(lambda x:str_common_word(x.split('\t')[0],x.split('\t')[2]))
     
     # # Add tokenized text as feature to the dataset
-    dataset["search_term"] = np.array(tokenized_query["input_ids"])
-    dataset["product_description"] = np.array(tokenized_description["input_ids"])
-    dataset["product_title"] = np.array(tokenized_title["input_ids"])
+    dataset["search_term"] = np.array(tokenized_query["input_ids"], dtype=object)
+    dataset["product_description"] = np.array(tokenized_description["input_ids"], dtype=object)
+    dataset["product_title"] = np.array(tokenized_title["input_ids"], dtype=object)
     
     # Split in X and y
     dataset = dataset.drop(['product_info'],axis=1)
@@ -129,12 +134,17 @@ def dataset_tokenizer_product_info(tokenizer, dataset):
     tokenized_description = tokenize_data(tokenizer, dataset["product_description"])    
     tokenized_title = tokenize_data(tokenizer, dataset["product_title"])  
     # Count common words
-    dataset["word_in_title"] = str_common_word(tokenized_query["input_ids"], tokenized_title["input_ids"])
-    dataset["word_in_description"] = str_common_word(tokenized_query["input_ids"], tokenized_description["input_ids"])
+    word_in_title = []
+    word_in_description = []
+    for query, title, description in zip(tokenized_query["input_ids"], tokenized_title["input_ids"], tokenized_description["input_ids"]):
+        word_in_title.append(str_common_word(query, title))
+        word_in_description.append(str_common_word(query, description))
+    dataset["word_in_title"] = word_in_title
+    dataset["word_in_description"] = word_in_description
     # Add tokenized text as feature to the dataset
-    dataset["search_term"] = np.array(tokenized_query["input_ids"])
-    dataset["product_description"] = np.array(tokenized_description["input_ids"])
-    dataset["product_title"] = np.array(tokenized_title["input_ids"])
+    dataset["search_term"] = np.array(tokenized_query["input_ids"], dtype=object)
+    dataset["product_description"] = np.array(tokenized_description["input_ids"], dtype=object)
+    dataset["product_title"] = np.array(tokenized_title["input_ids"], dtype=object)
     # Split in X and y
     X = dataset.drop(["relevance"], axis=1)
     y = dataset["relevance"]
@@ -161,6 +171,7 @@ def plot_relevance_score(relevance_score):
 
     plt.show()
     
+    
 # Plots the importance of features in the model
 def plot_importance_features(feature_names, X_train, y_train, seeds):    
     # Calculate the Importance of the features
@@ -179,6 +190,7 @@ def plot_importance_features(feature_names, X_train, y_train, seeds):
     plt.xlabel("Feature Importance")
     plt.title("Features sorted by Importance")
     plt.show()
+    plt.savefig("importance_bert.png")
     
 # Runs the experiment with seeds
 def run_experiment(X_train, X_test, y_train, y_test, debug, seeds):
@@ -219,7 +231,7 @@ def hyperparameter_optimization(X_train, y_train):
             'oob_score': [True, False], 
             'verbose': [0,  5,10,15,20,25,30,35,40],  
             'warm_start': [True, False]
-        }
+    }
     rf = RandomForestRegressor(n_estimators=15, max_depth=6, random_state=0)
     clf = BaggingRegressor(rf, n_estimators=45, max_samples=0.1, random_state=0)
     rscv = RandomizedSearchCV(clf, params, random_state=0)
@@ -240,12 +252,16 @@ def train(with_tokenizer=False, with_product_info=False, hp_optimization=False, 
     
     # Load specified version of dataset
     if with_tokenizer and with_product_info:
+        print("Running BERT Tokenizer + Tokenized Product Info")
         X, y = dataset_tokenizer_product_info(tokenizer, dataset)
     elif with_product_info:
+        print("Running Baseline + Tokenized Product Info")
         X, y = dataset_product_info(tokenizer, dataset, stemmer)
     elif with_tokenizer:
+        print("Running BERT Tokenizer")
         X, y = dataset_tokenizer(tokenizer, dataset)
     else:
+        print("Running Baseline")
         X, y = dataset_baseline(dataset, stemmer)
     
     # Train/test split
