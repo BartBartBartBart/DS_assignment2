@@ -287,9 +287,9 @@ if __name__=="__main__":
     # Set hp_optimization to True to do hyperparameter optimization
     train(
         with_tokenizer=False,
-        with_product_info=True,
+        with_product_info=False,
         hp_optimization=False,
         debug=False, 
         plot_data=False,
-        plot_importance=False
+        plot_importance=True
     )
