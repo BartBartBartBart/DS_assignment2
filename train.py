@@ -10,6 +10,7 @@ Authors:
   - Bart den Boef, s2829452, Data Science & Artificial Intelligence
 """
 
+# Necessary imports 
 from transformers import (
     BertTokenizerFast
 )
@@ -24,17 +25,17 @@ from nltk.stem.snowball import SnowballStemmer
 from sklearn.model_selection import RandomizedSearchCV
 import matplotlib.pyplot as plt
     
-    
+# Stems a string
 def str_stemmer(s, stemmer):
 	return " ".join([stemmer.stem(word) for word in s.lower().split()])
 
-
+# Counts the number of common words
 def str_common_word(str1, str2):
     str1 = str(str1)
     str2 = str(str2)
     return sum(int(str2.find(word)>=0) for word in str1.split())
 
-
+# Loads the data from a csv file into a pandas dataframe
 def load_data():
     train_df = pd.read_csv("./data/train.csv",encoding="latin-1",on_bad_lines = 'warn')
     product_df = pd.read_csv("./data/product_descriptions.csv",encoding="utf-8")
@@ -43,7 +44,7 @@ def load_data():
     df = df.drop(['id'],axis=1)
     return df
 
-
+# Tokenizes the data 
 def tokenize_data(tokenizer, data):
     list_data = data.tolist()
     tokenized_data = tokenizer(list_data, truncation=True, padding="longest")
@@ -62,10 +63,12 @@ def dataset_baseline(dataset, stemmer):
     dataset['search_term'] = dataset['search_term'].map(lambda x:str_stemmer(x,stemmer))
     dataset['product_title'] = dataset['product_title'].map(lambda x:str_stemmer(x,stemmer))
     dataset['product_description'] = dataset['product_description'].map(lambda x:str_stemmer(x,stemmer))
+    
     # Count common words
     dataset['product_info'] = dataset['search_term']+"\t"+dataset['product_title']+"\t"+dataset['product_description']
     dataset['word_in_title'] = dataset['product_info'].map(lambda x:str_common_word(x.split('\t')[0],x.split('\t')[1]))
     dataset['word_in_description'] = dataset['product_info'].map(lambda x:str_common_word(x.split('\t')[0],x.split('\t')[2]))
+    
     # Split in X and y
     dataset = dataset.drop(['search_term','product_title','product_description','product_info'],axis=1)
     X = dataset.drop(["relevance"], axis=1)
@@ -80,6 +83,7 @@ def dataset_tokenizer(tokenizer, dataset):
     tokenized_query = tokenize_data(tokenizer, dataset["search_term"])  
     tokenized_description = tokenize_data(tokenizer, dataset["product_description"])    
     tokenized_title = tokenize_data(tokenizer, dataset["product_title"])  
+    
     # Count common words
     word_in_title = []
     word_in_description = []
@@ -88,6 +92,7 @@ def dataset_tokenizer(tokenizer, dataset):
         word_in_description.append(str_common_word(query, description))
     dataset["word_in_title"] = word_in_title
     dataset["word_in_description"] = word_in_description
+    
     # Split in X and Y
     dataset = dataset.drop(['search_term', 'product_title', 'product_description'],axis=1)
     X = dataset.drop(["relevance"], axis=1)
@@ -133,6 +138,7 @@ def dataset_tokenizer_product_info(tokenizer, dataset):
     tokenized_query = tokenize_data(tokenizer, dataset["search_term"])  
     tokenized_description = tokenize_data(tokenizer, dataset["product_description"])    
     tokenized_title = tokenize_data(tokenizer, dataset["product_title"])  
+    
     # Count common words
     word_in_title = []
     word_in_description = []
@@ -141,10 +147,12 @@ def dataset_tokenizer_product_info(tokenizer, dataset):
         word_in_description.append(str_common_word(query, description))
     dataset["word_in_title"] = word_in_title
     dataset["word_in_description"] = word_in_description
+    
     # Add tokenized text as feature to the dataset
     dataset["search_term"] = np.array(tokenized_query["input_ids"], dtype=object)
     dataset["product_description"] = np.array(tokenized_description["input_ids"], dtype=object)
     dataset["product_title"] = np.array(tokenized_title["input_ids"], dtype=object)
+    
     # Split in X and y
     X = dataset.drop(["relevance"], axis=1)
     y = dataset["relevance"]
@@ -301,6 +309,8 @@ def train(with_tokenizer=False, with_product_info=False, hp_optimization=False, 
 if __name__=="__main__":
     # Turn 'with_tokenizer' and 'with_product_info' on or off to toggle between different setups
     # Set hp_optimization to True to do hyperparameter optimization
+    # Set plot_data to True to plot the distribution of relevance scores
+    # Set plot_importance to True to plot the importance of the features in the model
     train(
         with_tokenizer=False,
         with_product_info=False,
